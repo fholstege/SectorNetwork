@@ -68,8 +68,13 @@ def calc_real_matrices(l_nominal_matrices, l_previous_year_prices_matrices):
     return real_matrices
 
 
-def calc_eigenvec_centrality_sectors(df_sectors):
+def turn_df_to_networkx(df_sectors):
     networkx_sectors = nx.from_pandas_adjacency(df_sectors)
+    return networkx_sectors
+
+def calc_eigenvec_centrality_sectors(df_sectors):
+    networkx_sectors = turn_df_to_networkx(df_sectors)
+    
     eigenvector_centrality_sectors = nx.eigenvector_centrality_numpy(networkx_sectors)
     
     return eigenvector_centrality_sectors

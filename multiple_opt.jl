@@ -4,6 +4,7 @@ using DataFramesMeta
 using LinearAlgebra
 using LightGraphs
 using BlackBoxOptim
+using Statistics
 
 # in 2019, banking is ranked 1
 # question to answer: what to do to make banking increase one rank
@@ -102,7 +103,7 @@ end
 
 ## optimize naive objective function with budget constraint
 
-function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, λb = 0.25)
+function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, λb = 0.2)
 
     # construct A based on xs
     A_new = construct_A(deepcopy(A), x; opt = "inputs")
@@ -125,6 +126,30 @@ function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, λb
     return obj + budget_constraint
 end
 
+function repeated_spsa(n_runs, objective_func, bank_idx, bank_rank, vs_old, A, budget, λb,
+    SearchRange = (0.0, 5000.0), 
+    NumDimensions=80 , 
+    MaxSteps = 30000 )
+
+    results = Array{Any}(undef,NumDimensions , n_runs)
+    fill!(results,NaN)
+
+    Threads.@threads for i = 1:n_runs
+        result = bboptimize( x -> objective_func(x, bank_idx, bank_rank, vs_old, A, budget, λb);
+                SearchRange = SearchRange,
+                NumDimensions = NumDimensions,
+                MaxSteps = MaxSteps,
+                Method = :simultaneous_perturbation_stochastic_approximation,NThreads=Threads.nthreads()-2);
+
+        result_param = best_candidate(result)
+        results[:,i] = result_param
+    end
+
+    return results
+end
+
+        
+
 # init parameters and objects
 previous_total_x = sum(df[bank_idx, :]);
 
@@ -141,6 +166,9 @@ res_naive = bboptimize(x -> naive_objective_w_budget(x, bank_idx, bank_rank, vs_
                 MaxSteps = 30000,
                 Method = :simultaneous_perturbation_stochastic_approximation,NThreads=Threads.nthreads()-2);
 
+
+best_candidate(res_naive)
+
 # check results
 check_budget_constraint(res_naive, budget)
 
@@ -154,6 +182,10 @@ DataFrame(original = A[bank_idx,:],
 # get top 10 sectors in terms of eigenvector centrality
 A_result = construct_A(copy(A), best_candidate(res_naive), opt = "inputs");
 vs_result = get_eigen_centrality(A_result);
+vs_original
+
+vs_original_names = hcat(col_names, vs_original)
+vs_result_names = hcat(col_names, vs_result)
 
 top10_original = [get_sector_ranked_nth(vs_original, i) for i in 1:10]
 top10_result = [get_sector_ranked_nth(vs_result, i) for i in 1:10]
@@ -161,7 +193,24 @@ top10_result = [get_sector_ranked_nth(vs_result, i) for i in 1:10]
 hcat(top10_original, top10_result)
     
 
-top10_original = [vs_original[get_sector_ranked_nth(vs_original, i)] for i in 1:10]
-top10_result = [vs_original[get_sector_ranked_nth(vs_result, i)] for i in 1:10]
+top10_original = [vs_original_names[get_sector_ranked_nth(vs_original, i),1:2] for i in 1:10]
+top10_result = [vs_result_names[get_sector_ranked_nth(vs_result, i),1:2] for i in 1:10]
 
 hcat(top10_original, top10_result)
+
+
+
+
+
+
+###############
+
+results = repeated_spsa(100,  naive_objective_w_budget, bank_idx, bank_rank, vs_old, A, budget, 0.2)
+
+average_row_values = mean(results, dims= 2)
+sd_row_values = std(results, dims = 2)
+
+CI_lower_row_values = average_row_values - (1.96* sd_row_values)
+CI_upper_row_values = average_row_values + (1.96* sd_row_values)
+
+hcat(average_row_values,sd_row_values,CI_lower_row_values, CI_upper_row_values  )

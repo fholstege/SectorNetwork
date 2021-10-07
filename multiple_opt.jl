@@ -14,6 +14,8 @@ data_path = joinpath(@__DIR__, "Data", "Matrices", "2016_nominal.csv")
 df = CSV.read(data_path, DataFrame)
 @select!(df, $(Not("Column1")))
 
+
+
 # save column / row names in order
 col_names = names(df)
 
@@ -21,6 +23,8 @@ col_names = names(df)
 const bank_idx = findall(col_names .== "Banking")[1]
 
 ## define helper functions
+
+
 
 function get_eigen_centrality(A)
     return eigenvector_centrality(SimpleDiGraph(A))
@@ -109,7 +113,7 @@ function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, λb
     A_new = construct_A(deepcopy(A), x; opt = "inputs")
 
     # get new eigenvector centralities
-    vs_new = get_eigen_centrality(A_new) 
+    vs_new = calc_eigenvec_centrality(A_new, "right") 
 
     # get eigenvector centrality of the sector in next rank
     v_next_rank = get_v_of_next_rank(vs_new, bank_rank)
@@ -148,24 +152,61 @@ function repeated_spsa(n_runs, objective_func, bank_idx, bank_rank, vs_old, A, b
     return results
 end
 
+
+function normalize_rows_matrix(A)
+    rowSums = sum(A, dims=2)
+    normalized_matrix = A ./rowSums
+    replace!(normalized_matrix, NaN=>0)
+    return normalized_matrix
+end
+
+function normalize_rows_df(df)
+    rowSums = sum.(eachrow(df))
+    normalized_df = df ./rowSums
+
+    replace_nan!(v::AbstractVector) = map!(x -> isnan(x) ? zero(x) : x, v, v)
+
+    df_normalized_noNaN = ifelse.(isnan.(normalized_df), 0, normalized_df)
+    return df_normalized_noNaN
+end
+
+
+function calc_eigenvec_centrality(A, type_centrality)
+
+    if type_centrality == "left"
+        A = transpose(A)
+    end
+    K = size(A, 1)
+    k = 1
+    eigen_result = eigen(A)
+    eigenvectors = eigen_result.vectors[:,K-k+1:K]
+
+    convert(Vector{Float64}, vs_new)
+
+
+    return convert(Vector{Float64}, vec(eigenvectors)) 
+end
+
         
+df_normalized = normalize_rows_df(df)
 
 # init parameters and objects
-previous_total_x = sum(df[bank_idx, :]);
+previous_total_x = sum(df_normalized[bank_idx, :]);
 
 A, vs_old, bank_rank, budget = initialize_objects(df, previous_total_x, bank_idx);
+
+
 
 # save vs_old for evaluation of results
 vs_original = deepcopy(vs_old);
 
 # we have to pick year data where banking is not highly ranked
 # otherwise problem if banking is already rank 1, or if it has the same eigenvector centrality as rank 1
-res_naive = bboptimize(x -> naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, 0.2);
-                SearchRange = (0.0,5000.0),
+res_naive = bboptimize(x -> naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A_normalized, budget, 0.2);
+                SearchRange = (0.0,1.0),
                 NumDimensions = 80,
                 MaxSteps = 30000,
                 Method = :simultaneous_perturbation_stochastic_approximation,NThreads=Threads.nthreads()-2);
-
 
 best_candidate(res_naive)
 
@@ -174,15 +215,15 @@ check_budget_constraint(res_naive, budget)
 
 hcat(best_candidate(res_naive), A[bank_idx,:], col_names)
 
-DataFrame(original = A[bank_idx,:],
+DataFrame(original = A_normalized[bank_idx,:],
           result = best_candidate(res_naive),
           sector = col_names)
 
 
 # get top 10 sectors in terms of eigenvector centrality
-A_result = construct_A(copy(A), best_candidate(res_naive), opt = "inputs");
-vs_result = get_eigen_centrality(A_result);
-vs_original
+A_result = construct_A(copy(A_normalized), best_candidate(res_naive), opt = "inputs");
+vs_result = calc_eigenvec_centrality(A_result, "right");
+
 
 vs_original_names = hcat(col_names, vs_original)
 vs_result_names = hcat(col_names, vs_result)

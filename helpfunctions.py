@@ -126,7 +126,7 @@ def turn_df_to_networkx(df_sectors):
     networkx_sectors = nx.from_pandas_adjacency(df_sectors,  nx.DiGraph)
     return networkx_sectors
 
-def calc_eigenvec_centrality_sectors(df_sectors, type_centrality):
+def calc_eigenvec_centrality_sectors(df_sectors, type_centrality, weight='weight'):
     
     # turn df to networkx
     networkx_sectors = turn_df_to_networkx(df_sectors)
@@ -136,8 +136,7 @@ def calc_eigenvec_centrality_sectors(df_sectors, type_centrality):
         networkx_sectors = networkx_sectors.reverse()
     
     # use networkx function to calculate the eigenvector centrality
-    eigenvector_centrality_sectors = nx.eigenvector_centrality_numpy(networkx_sectors)
-    
+    eigenvector_centrality_sectors = nx.eigenvector_centrality_numpy(networkx_sectors, weight = weight)
     return eigenvector_centrality_sectors
 
 def normalize_matrix_rows(df_sectors):
@@ -155,7 +154,7 @@ def normalize_matrix_rows(df_sectors):
 Part 3:functions for simulating matrices
 """
 
-def simulate_matrices(base_matrix, perc_sd, n_matrices):
+def simulate_matrices(base_matrix, perc_sd, n_matrices, keep_zero):
     """
     
 
@@ -190,26 +189,31 @@ def simulate_matrices(base_matrix, perc_sd, n_matrices):
     for rowIndex, row in base_matrix.iterrows(): #iterate over rows
         for columnIndex, mean_value in row.items():
             
-            if mean_value == 0:
-                sd_simulation = perc_sd * 1
+            if keep_zero and mean_value == 0: 
+                simulated_values_cell = [0]* n_matrices
+                l_simulated_values.append(simulated_values_cell)
             else:
-                # determine the sd
-                sd_simulation = mean_value*perc_sd
             
-            simulated_values_cell = []
-            
-            for i in range(0, n_matrices):
+                if mean_value == 0:
+                    sd_simulation = perc_sd * 1
+                else:
+                    # determine the sd
+                    sd_simulation = mean_value*perc_sd
                 
-                simulated_value_cell = np.random.normal(mean_value, sd_simulation, None)
+                simulated_values_cell = []
                 
-                # accept reject
-                while simulated_value_cell < 0:
+                for i in range(0, n_matrices):
+                    
                     simulated_value_cell = np.random.normal(mean_value, sd_simulation, None)
+                    
+                    # accept reject
+                    while simulated_value_cell < 0:
+                        simulated_value_cell = np.random.normal(mean_value, sd_simulation, None)
+                    
+                    simulated_values_cell.append(simulated_value_cell)
                 
-                simulated_values_cell.append(simulated_value_cell)
-            
-            # simulate values of this cell            
-            l_simulated_values.append(simulated_values_cell)
+                # simulate values of this cell            
+                l_simulated_values.append(simulated_values_cell)
             
     df_simulations = pd.DataFrame.from_records(l_simulated_values)
     
@@ -226,7 +230,7 @@ def simulate_matrices(base_matrix, perc_sd, n_matrices):
 
 
 
-def get_CI_eigenvector_centrality(l_simulated_matrices, type_centrality):
+def get_CI_eigenvector_centrality(l_simulated_matrices, type_centrality, normalize = True):
     """
     
 
@@ -245,6 +249,10 @@ def get_CI_eigenvector_centrality(l_simulated_matrices, type_centrality):
     
     l_eigenvec_results = []
     for df_matrix in l_simulated_matrices:
+        
+        if normalize:
+            df_matrix = normalize_matrix_rows(df_matrix)
+            
         eigenvec_centrality = calc_eigenvec_centrality_sectors(df_matrix, type_centrality)
         l_eigenvec_results.append(eigenvec_centrality)
     

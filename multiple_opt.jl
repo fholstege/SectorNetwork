@@ -24,12 +24,38 @@ const bank_idx = findall(col_names .== "Banking")[1]
 
 ## define helper functions
 
-
-
-function get_eigen_centrality(A)
-    return eigenvector_centrality(SimpleDiGraph(A))
+function normalize_rows_matrix(A)
+    rowSums = sum(A, dims=2)
+    normalized_matrix = A ./rowSums
+    replace!(normalized_matrix, NaN=>0)
+    return normalized_matrix
 end
 
+function normalize_rows_df(df)
+    rowSums = sum.(eachrow(df))
+    normalized_df = df ./rowSums
+
+    replace_nan!(v::AbstractVector) = map!(x -> isnan(x) ? zero(x) : x, v, v)
+
+    df_normalized_noNaN = ifelse.(isnan.(normalized_df), 0, normalized_df)
+    return df_normalized_noNaN
+end
+
+
+function calc_eigenvec_centrality(A, type_centrality)
+
+    if type_centrality == "left"
+        A = transpose(A)
+    end
+    K = size(A, 1)
+    k = 1
+    eigen_result = eigen(A)
+    eigenvectors = eigen_result.vectors[:,K-k+1:K]
+
+    return convert(Vector{Float64}, vec(eigenvectors)) 
+end
+
+        
 function get_distance_to_max_v(vs)
     max_v = maximum(vs)
     return max_v .- vs
@@ -66,9 +92,16 @@ function find_next_rank_idx(vs)
 end
 
 # function to initialize all objects for optimization
-function initialize_objects(df, budget, bank_idx)
+function initialize_objects(df, budget, bank_idx, normalize = true)
     A = Matrix(df);
-    vs_old = get_eigen_centrality(A); 
+
+    if normalize
+        A_norm = normalize_rows_matrix(A)
+        vs_old = calc_eigenvec_centrality(A_norm, "right"); 
+    else 
+        vs_old = calc_eigenvec_centrality(A, "right")
+    end
+    
     bank_rank = get_bank_rank(vs_old, bank_idx);
     println("bank rank = $bank_rank")
     
@@ -107,11 +140,14 @@ end
 
 ## optimize naive objective function with budget constraint
 
-function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, λb = 0.2)
+function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, normalize, λb = 0.2)
 
     # construct A based on xs
     A_new = construct_A(deepcopy(A), x; opt = "inputs")
 
+    if normalize
+        A_new = normalize_rows_matrix(A_new)
+    end 
     # get new eigenvector centralities
     vs_new = calc_eigenvec_centrality(A_new, "right") 
 
@@ -153,57 +189,26 @@ function repeated_spsa(n_runs, objective_func, bank_idx, bank_rank, vs_old, A, b
 end
 
 
-function normalize_rows_matrix(A)
-    rowSums = sum(A, dims=2)
-    normalized_matrix = A ./rowSums
-    replace!(normalized_matrix, NaN=>0)
-    return normalized_matrix
-end
 
-function normalize_rows_df(df)
-    rowSums = sum.(eachrow(df))
-    normalized_df = df ./rowSums
-
-    replace_nan!(v::AbstractVector) = map!(x -> isnan(x) ? zero(x) : x, v, v)
-
-    df_normalized_noNaN = ifelse.(isnan.(normalized_df), 0, normalized_df)
-    return df_normalized_noNaN
-end
-
-
-function calc_eigenvec_centrality(A, type_centrality)
-
-    if type_centrality == "left"
-        A = transpose(A)
-    end
-    K = size(A, 1)
-    k = 1
-    eigen_result = eigen(A)
-    eigenvectors = eigen_result.vectors[:,K-k+1:K]
-
-    convert(Vector{Float64}, vs_new)
-
-
-    return convert(Vector{Float64}, vec(eigenvectors)) 
-end
-
-        
-df_normalized = normalize_rows_df(df)
 
 # init parameters and objects
-previous_total_x = sum(df_normalized[bank_idx, :]);
+previous_total_x = sum(df[bank_idx, :]);
 
+# now with normalize = True; A = unnormalized, vs_old = from normalized matrix
 A, vs_old, bank_rank, budget = initialize_objects(df, previous_total_x, bank_idx);
-
-
 
 # save vs_old for evaluation of results
 vs_original = deepcopy(vs_old);
 
+# put the constraints in place
+constraint = (0.0,5000.0)
+constraints = [constraint for i in 1:80]
+
+
 # we have to pick year data where banking is not highly ranked
 # otherwise problem if banking is already rank 1, or if it has the same eigenvector centrality as rank 1
-res_naive = bboptimize(x -> naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A_normalized, budget, 0.2);
-                SearchRange = (0.0,1.0),
+res_naive = bboptimize(x -> naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget,true, 0.5); # put lambda_b = 0.5
+                SearchRange = constraints,
                 NumDimensions = 80,
                 MaxSteps = 30000,
                 Method = :simultaneous_perturbation_stochastic_approximation,NThreads=Threads.nthreads()-2);
@@ -224,6 +229,8 @@ DataFrame(original = A_normalized[bank_idx,:],
 A_result = construct_A(copy(A_normalized), best_candidate(res_naive), opt = "inputs");
 vs_result = calc_eigenvec_centrality(A_result, "right");
 
+vs_original_names[]
+
 
 vs_original_names = hcat(col_names, vs_original)
 vs_result_names = hcat(col_names, vs_result)
@@ -231,7 +238,6 @@ vs_result_names = hcat(col_names, vs_result)
 top10_original = [get_sector_ranked_nth(vs_original, i) for i in 1:10]
 top10_result = [get_sector_ranked_nth(vs_result, i) for i in 1:10]
 
-hcat(top10_original, top10_result)
     
 
 top10_original = [vs_original_names[get_sector_ranked_nth(vs_original, i),1:2] for i in 1:10]

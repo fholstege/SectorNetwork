@@ -48,6 +48,8 @@ def SPSA_estimator(K, Theta_start, a, r, Y):
         determines the epsilon for SPSA .
     r : float
         determines the steps taken when G is estimated.
+    Y: function
+        objective function to be optimized
 
     Returns
     -------
@@ -75,5 +77,7 @@ def SPSA_estimator(K, Theta_start, a, r, Y):
     return Theta 
 
     
+
+
 
 

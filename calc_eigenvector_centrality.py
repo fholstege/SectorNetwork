@@ -7,14 +7,16 @@ import numpy as np
 import math
 
 # load in the nominal and real values for 2019
-m2019_nominal = pd.read_csv('Data/matrices/2019_nominal.csv',index_col=0)
-m2019_real = pd.read_csv('Data/matrices/2019_real.csv',index_col=0)
+m2016_nominal = pd.read_csv('Data/matrices/2016_nominal.csv',index_col=0)
+m2016_real = pd.read_csv('Data/matrices/2016_real.csv',index_col=0)
 
-calc_eigenvec_centrality_sectors(m2019_nominal, 'right')
 
 # normalize these (row sums)
-m2019_nominal_normalized = normalize_matrix_rows(m2019_nominal)
-m2019_real_normalized = normalize_matrix_rows(m2019_real)
+m2016_nominal_normalized = normalize_matrix_rows(m2016_nominal)
+m2016_real_normalized = normalize_matrix_rows(m2016_real)
+
+calc_eigenvec_centrality_sectors(m2016_nominal_normalized, 'left', weight = 'weight')
+
 
 # calculate the eigenvector for each
 m2019_nominal_normalized_eigenvector = calc_eigenvec_centrality_sectors(m2019_nominal_normalized, 'left')

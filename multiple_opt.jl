@@ -51,8 +51,9 @@ function calc_eigenvec_centrality(A, type_centrality)
     k = 1
     eigen_result = eigen(A)
     eigenvectors = eigen_result.vectors[:,K-k+1:K]
+    eigenvectors_abs = abs.(eigenvectors)
 
-    return convert(Vector{Float64}, vec(eigenvectors)) 
+    return convert(Vector{Float64}, vec(eigenvectors_abs)) 
 end
 
         
@@ -158,6 +159,8 @@ function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, nor
     obj = (1-λb) * (1e4 * max(0, (v_next_rank - vs_new[bank_idx])))
     budget_constraint = λb * max(0, sum(x) - budget)^2
 
+    
+
     # hand over parameters
     for i in 1:length(vs_old)
         vs_old[i] = vs_new[i]
@@ -229,11 +232,12 @@ DataFrame(original = A_normalized[bank_idx,:],
 A_result = construct_A(copy(A_normalized), best_candidate(res_naive), opt = "inputs");
 vs_result = calc_eigenvec_centrality(A_result, "right");
 
-vs_original_names[]
-
 
 vs_original_names = hcat(col_names, vs_original)
 vs_result_names = hcat(col_names, vs_result)
+
+vs_original_names[bank_idx-1:bank_idx+1,:]
+vs_result_names[bank_idx-1:bank_idx+1,:]
 
 top10_original = [get_sector_ranked_nth(vs_original, i) for i in 1:10]
 top10_result = [get_sector_ranked_nth(vs_result, i) for i in 1:10]

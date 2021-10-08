@@ -5,6 +5,7 @@ using LinearAlgebra
 using LightGraphs
 using BlackBoxOptim
 using Statistics
+using Plots
 
 # in 2019, banking is ranked 1
 # question to answer: what to do to make banking increase one rank
@@ -141,8 +142,9 @@ end
 
 ## optimize naive objective function with budget constraint
 
-function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, normalize, λb = 0.2)
+function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, normalize, save_x, list_obj_values, list_constraint_values, λb = 0.2)
 
+    push!(save_x, x)
     # construct A based on xs
     A_new = construct_A(deepcopy(A), x; opt = "inputs")
 
@@ -159,6 +161,8 @@ function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, nor
     obj = (1-λb) * (1e4 * max(0, (v_next_rank - vs_new[bank_idx])))
     budget_constraint = λb * max(0, sum(x) - budget)^2
 
+    push!(list_obj_values, obj)
+    push!(list_constraint_values, budget_constraint) 
     
 
     # hand over parameters
@@ -207,16 +211,28 @@ vs_original = deepcopy(vs_old);
 constraint = (0.0,5000.0)
 constraints = [constraint for i in 1:80]
 
+list_obj_values = []
+list_constraint_values = []
+save_x = []
 
+x_0 = A[bank_idx, :]
 # we have to pick year data where banking is not highly ranked
 # otherwise problem if banking is already rank 1, or if it has the same eigenvector centrality as rank 1
-res_naive = bboptimize(x -> naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget,true, 0.5); # put lambda_b = 0.5
+res_naive = bboptimize(x -> naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget,true,  list_obj_values,list_constraint_values ,save_x,0.5); # put lambda_b = 0.5
+                x0 = x_0,
                 SearchRange = constraints,
                 NumDimensions = 80,
-                MaxSteps = 30000,
+                MaxSteps = 3000,
                 Method = :simultaneous_perturbation_stochastic_approximation,NThreads=Threads.nthreads()-2);
 
 best_candidate(res_naive)
+list_constraint_values
+
+
+x = 1:length(list_obj_values)
+y = list_obj_values; # These are the plotting data
+plot(x, y)
+
 
 # check results
 check_budget_constraint(res_naive, budget)
@@ -265,3 +281,25 @@ CI_lower_row_values = average_row_values - (1.96* sd_row_values)
 CI_upper_row_values = average_row_values + (1.96* sd_row_values)
 
 hcat(average_row_values,sd_row_values,CI_lower_row_values, CI_upper_row_values  )
+
+
+
+####
+
+x = best_candidate(res_naive)
+ # construct A based on xs
+A_new = construct_A(deepcopy(A), x; opt = "inputs")
+
+ 
+A_new = normalize_rows_matrix(A_new) 
+ # get new eigenvector centralities
+vs_new = calc_eigenvec_centrality(A_new, "right")
+vs_new[bank_idx]
+ # get eigenvector centrality of the sector in next rank
+ v_next_rank = get_v_of_next_rank(vs_new, bank_rank)
+
+ # define objective function
+ λb=0.5
+ obj = (1-λb) * (1e4 * max(0, (v_next_rank - vs_new[bank_idx])))
+ budget_constraint = λb * max(0, sum(x) - budget)^2
+ obj

@@ -1,30 +1,11 @@
-using CSV
 using DataFrames
 using DataFramesMeta
 using LinearAlgebra
 using LightGraphs
 using BlackBoxOptim
 using Statistics
-using Plots
 
-# in 2019, banking is ranked 1
-# question to answer: what to do to make banking increase one rank
-
-## load data
-data_path = joinpath(@__DIR__, "Data", "Matrices", "2016_nominal.csv")
-df = CSV.read(data_path, DataFrame)
-@select!(df, $(Not("Column1")))
-
-
-
-# save column / row names in order
-col_names = names(df)
-
-# get column and row index of banking
-const bank_idx = findall(col_names .== "Banking")[1]
-
-## define helper functions
-
+# normalizes the rows of a matrix
 function normalize_rows_matrix(A)
     rowSums = sum(A, dims=2)
     normalized_matrix = A ./rowSums
@@ -32,17 +13,7 @@ function normalize_rows_matrix(A)
     return normalized_matrix
 end
 
-function normalize_rows_df(df)
-    rowSums = sum.(eachrow(df))
-    normalized_df = df ./rowSums
-
-    replace_nan!(v::AbstractVector) = map!(x -> isnan(x) ? zero(x) : x, v, v)
-
-    df_normalized_noNaN = ifelse.(isnan.(normalized_df), 0, normalized_df)
-    return df_normalized_noNaN
-end
-
-
+# calculate the eigenvector centrality of a directed graph
 function calc_eigenvec_centrality(A, type_centrality)
 
     if type_centrality == "left"
@@ -57,16 +28,19 @@ function calc_eigenvec_centrality(A, type_centrality)
     return convert(Vector{Float64}, vec(eigenvectors_abs)) 
 end
 
-        
+
+# get the distance to the max vector
 function get_distance_to_max_v(vs)
     max_v = maximum(vs)
     return max_v .- vs
 end
 
+# get the sector ranked n 
 function get_sector_ranked_nth(vs, n)
     return sortperm(vs, rev=true)[n]
 end
 
+# construct the A matrix
 function construct_A(A, x; opt = "all")
     if opt == "all"
         if length(x) != (80+79)
@@ -142,9 +116,44 @@ end
 
 ## optimize naive objective function with budget constraint
 
-function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, normalize, save_x, list_obj_values, list_constraint_values, λb = 0.2)
+function naive_objective(x, bank_idx, bank_rank, vs_old, A,  normalize, list_obj_values, λb = 0.2, use_abs_diff = false)
+     # construct A based on xs
+     A_new = construct_A(deepcopy(A), x; opt = "inputs")
 
-    push!(save_x, x)
+     if normalize
+         A_new = normalize_rows_matrix(A_new)
+     end 
+     # get new eigenvector centralities
+     vs_new = calc_eigenvec_centrality(A_new, "right") 
+ 
+     # get eigenvector centrality of the sector in next rank
+     v_next_rank = get_v_of_next_rank(vs_new, bank_rank)
+
+     # eigenvec difference
+    eigenvec_diff = v_next_rank - vs_new[bank_idx]
+
+    if use_abs_diff
+        eigenvec_diff = abs(eigenvec_diff)
+    end 
+ 
+     # define objective function
+     obj = (1-λb) * (1e4 * max(0, (eigenvec_diff)))
+ 
+     # save score objective function
+     push!(list_obj_values, obj)     
+ 
+     # hand over parameters
+     for i in 1:length(vs_old)
+         vs_old[i] = vs_new[i]
+     end
+ 
+     return obj 
+ end
+ 
+
+
+function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, normalize,  list_obj_values, list_constraint_values, λb = 0.2, use_abs_diff = false)
+
     # construct A based on xs
     A_new = construct_A(deepcopy(A), x; opt = "inputs")
 
@@ -157,8 +166,15 @@ function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, nor
     # get eigenvector centrality of the sector in next rank
     v_next_rank = get_v_of_next_rank(vs_new, bank_rank)
 
+    # eigenvec difference
+    eigenvec_diff = v_next_rank - vs_new[bank_idx]
+
+    if use_abs_diff
+        eigenvec_diff = abs(eigenvec_diff)
+    end 
+
     # define objective function
-    obj = (1-λb) * (1e4 * max(0, (v_next_rank - vs_new[bank_idx])))
+    obj = (1-λb) * (1e4 * max(0, eigenvec_diff))
     budget_constraint = λb * max(0, sum(x) - budget)^2
 
     push!(list_obj_values, obj)
@@ -173,6 +189,9 @@ function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, nor
     return obj + budget_constraint
 end
 
+
+
+# repeat the SPSA n_runs times 
 function repeated_spsa(n_runs, objective_func, bank_idx, bank_rank, vs_old, A, budget, λb,
     SearchRange = (0.0, 5000.0), 
     NumDimensions=80 , 
@@ -196,112 +215,3 @@ function repeated_spsa(n_runs, objective_func, bank_idx, bank_rank, vs_old, A, b
 end
 
 
-
-
-# init parameters and objects
-previous_total_x = sum(df[bank_idx, :]);
-
-# now with normalize = True; A = unnormalized, vs_old = from normalized matrix
-A, vs_old, bank_rank, budget = initialize_objects(df, previous_total_x, bank_idx);
-
-# save vs_old for evaluation of results
-vs_original = deepcopy(vs_old);
-
-# put the constraints in place
-constraint = (0.0,5000.0)
-constraints = [constraint for i in 1:80]
-
-list_obj_values = []
-list_constraint_values = []
-save_x = []
-
-x_0 = A[bank_idx, :]
-# we have to pick year data where banking is not highly ranked
-# otherwise problem if banking is already rank 1, or if it has the same eigenvector centrality as rank 1
-res_naive = bboptimize(x -> naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget,true,  list_obj_values,list_constraint_values ,save_x,0.5); # put lambda_b = 0.5
-                x0 = x_0,
-                SearchRange = constraints,
-                NumDimensions = 80,
-                MaxSteps = 3000,
-                Method = :simultaneous_perturbation_stochastic_approximation,NThreads=Threads.nthreads()-2);
-
-best_candidate(res_naive)
-list_constraint_values
-
-
-x = 1:length(list_obj_values)
-y = list_obj_values; # These are the plotting data
-plot(x, y)
-
-
-# check results
-check_budget_constraint(res_naive, budget)
-
-hcat(best_candidate(res_naive), A[bank_idx,:], col_names)
-
-DataFrame(original = A_normalized[bank_idx,:],
-          result = best_candidate(res_naive),
-          sector = col_names)
-
-
-# get top 10 sectors in terms of eigenvector centrality
-A_result = construct_A(copy(A), best_candidate(res_naive), opt = "inputs");
-
-vs_result = calc_eigenvec_centrality(normalize_rows_matrix(A_result), "right");
-
-
-vs_original_names = hcat(col_names, vs_original)
-vs_result_names = hcat(col_names, vs_result)
-
-vs_original_names[bank_idx-1:bank_idx+1,:]
-vs_result_names[bank_idx-1:bank_idx+1,:]
-
-
-top10_original = [get_sector_ranked_nth(vs_original, i) for i in 75:80]
-top10_result = [get_sector_ranked_nth(vs_result, i) for i in 75:80]
-
-    
-
-top10_original = [vs_original_names[get_sector_ranked_nth(vs_original, i),1:2] for i in 75:80]
-top10_result = [vs_result_names[get_sector_ranked_nth(vs_result, i),1:2] for i in 75:80]
-
-hcat(top10_original, top10_result)
-
-
-
-
-
-
-###############
-
-results = repeated_spsa(100,  naive_objective_w_budget, bank_idx, bank_rank, vs_old, A, budget, 0.2)
-
-average_row_values = mean(results, dims= 2)
-sd_row_values = std(results, dims = 2)
-
-CI_lower_row_values = average_row_values - (1.96* sd_row_values)
-CI_upper_row_values = average_row_values + (1.96* sd_row_values)
-
-hcat(average_row_values,sd_row_values,CI_lower_row_values, CI_upper_row_values  )
-
-
-
-####
-
-x = best_candidate(res_naive)
- # construct A based on xs
-A_new = construct_A(deepcopy(A), x; opt = "inputs")
-
- 
-A_new = normalize_rows_matrix(A_new) 
- # get new eigenvector centralities
-vs_new = calc_eigenvec_centrality(A_new, "right")
-vs_new[bank_idx]
- # get eigenvector centrality of the sector in next rank
- v_next_rank = get_v_of_next_rank(vs_new, bank_rank)
-
- # define objective function
- λb=0.5
- obj = (1-λb) * (1e4 * max(0, (v_next_rank - vs_new[bank_idx])))
- budget_constraint = λb * max(0, sum(x) - budget)^2
- obj

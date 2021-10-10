@@ -263,6 +263,8 @@ def get_CI_eigenvector_centrality(l_simulated_matrices, type_centrality, normali
     lower_CI = avg - (std*1.96)
     upper_CI = avg + (std*1.96)
     
+    lower_CI = lower_CI.apply(lambda x: x if x>0 else 0)
+    
     df_CI_eigenvector_centrality = pd.concat([avg, lower_CI, upper_CI], axis=1)
     df_CI_eigenvector_centrality.columns = ['avg', 'lower_CI', 'upper_CI']
     

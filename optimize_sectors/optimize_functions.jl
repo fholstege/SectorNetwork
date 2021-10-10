@@ -14,20 +14,19 @@ function normalize_rows_matrix(A)
 end
 
 # calculate the eigenvector centrality of a directed graph
-function calc_eigenvec_centrality(A, type_centrality)
+function calc_eigenvec_centrality(A, type_centrality, normalize)
 
     if type_centrality == "left"
         A = transpose(A)
     end
+
     K = size(A, 1)
     k = 1
     eigen_result = eigen(A)
     eigenvectors = eigen_result.vectors[:,K-k+1:K]
-    eigenvectors_abs = abs.(eigenvectors)
 
-    return convert(Vector{Float64}, vec(eigenvectors_abs)) 
+    return convert(Vector{Float64}, vec(eigenvectors)) 
 end
-
 
 # get the distance to the max vector
 function get_distance_to_max_v(vs)

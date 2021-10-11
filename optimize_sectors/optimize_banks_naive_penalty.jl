@@ -35,13 +35,13 @@ constraint = (0.0,5000.0)
 list_obj_values = []
 list_constraint_values = []
 
-steps = 10000
+steps = 50000
 λb = 0.5
 
 iterator = 0
 
 # get result of naive objective with budget
-res_naive = bboptimize(x -> naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, true, list_obj_values, list_constraint_values, iterator, λb, false); 
+res_naive = bboptimize(x -> naive_objective_w_penalty(x, bank_idx, bank_rank, vs_old, A, budget, true, list_obj_values, list_constraint_values, iterator, vs_original, x_0, λb, false); 
                 x0 = x_0,
                 SearchRange = constraint,
                 NumDimensions = 80,
@@ -85,6 +85,8 @@ vs_result_names[bank_idx, :]
 
 # What is the new rank of banking? 
 bank_rank_new = get_bank_rank(vs_result, bank_idx);
+
+println("original rank: $bank_rank -- new rank: $bank_rank_new")
 
 # the sectors ones around banking 
 top_around_banking_original = [vs_original_names[get_sector_ranked_nth(vs_original, i),1:2] for i in bank_rank-K_up:bank_rank+K_low]

@@ -185,8 +185,12 @@ function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, nor
     end 
 
     # define objective function
-    obj = (1-λb) * (1e4 * max(-0.000001, eigenvec_diff))
-    budget_constraint = λb * max(0, sum(x) - budget)^2
+    # obj = (1-λb) * (1e5 * max(-0.000001, eigenvec_diff))
+    # budget_constraint = λb * max(0, sum(x) - budget)^2
+
+
+    obj = (1e5 * max(-0.000000001, eigenvec_diff))
+    budget_constraint = max(0, sum(x) - budget)^2
 
     push!(list_obj_values, obj)
     push!(list_constraint_values, budget_constraint) 
@@ -198,16 +202,100 @@ function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, nor
     end
 
     # optimize one or the other based on steps
-    if step_iterator <= 200.0
-        return obj
-    else
-        # reset iterator after 200 steps
-        if step_iterator == 300.0
-            global iterator = 0
-        end
-        return budget_constraint
-    end    
+    # if step_iterator <= 100.0
+    #     fitness = obj
+    # else
+    #     # reset iterator after 200 steps
+    #     if step_iterator == 500.0
+    #         println("iterator reset, step $step_iterator")
+    #         global iterator = 0
+    #     end
+    #     fitness = budget_constraint
+    # end    
+
+    fitness = obj + log(sqrt(step_iterator)) * budget_constraint + sum(x)
+
+    return fitness
 end
+
+
+function naive_objective_w_penalty(x, bank_idx, bank_rank, vs_old, A, budget, normalize, list_obj_values, list_constraint_values, iterator, vs_initial, x_initial, λb = 0.2, use_abs_diff = false)
+
+    # update global iterator
+    global iterator += 1
+
+    # 2 function evaluations per step
+    step_iterator = iterator / 2
+
+    # construct A based on xs
+    A_new = construct_A(deepcopy(A), x; opt = "inputs")
+
+    if normalize
+        A_new = normalize_rows_matrix(A_new)
+    end 
+    # get new eigenvector centralities
+    vs_new = calc_eigenvec_centrality(A_new, "right") 
+
+    # get eigenvector centrality of the sector in next rank
+    v_next_rank = get_v_of_next_rank(vs_new, bank_rank)
+
+    # eigenvec difference
+    eigenvec_diff = v_next_rank - vs_new[bank_idx]
+
+    if use_abs_diff
+        eigenvec_diff = abs(eigenvec_diff)
+    end 
+
+    # define objective function
+    # obj = (1-λb) * (1e5 * max(-0.000001, eigenvec_diff))
+    # budget_constraint = λb * max(0, sum(x) - budget)^2
+
+
+    obj = (1e5 * max(-0.0000000001, eigenvec_diff))
+    budget_constraint = max(0, sum(x) - budget)^2
+    
+    # try to ensure other eigenvec centralities do not vary much
+    penalty_v = sum((1e4 .* abs.(vs_new[1:end .!= bank_idx] .- vs_initial[1:end .!= bank_idx])))
+
+    # ensure xs do not change too much from original A
+    penalty_x = 1/length(x) * sum((x .- x_initial).^2)
+    # helps to have sth that changes with each step to indicate
+    # SPSA in which direction to go
+
+
+    push!(list_obj_values, obj)
+    push!(list_constraint_values, budget_constraint) 
+    
+
+    # hand over parameters
+    for i in 1:length(vs_old)
+        vs_old[i] = vs_new[i]
+    end
+
+    # optimize one or the other based on steps
+    # if step_iterator <= 100.0
+    #     fitness = obj
+    # else
+    #     # reset iterator after 200 steps
+    #     if step_iterator == 500.0
+    #         println("iterator reset, step $step_iterator")
+    #         global iterator = 0
+    #     end
+    #     fitness = budget_constraint
+    # end    
+
+    fitness = obj + log(step_iterator) * budget_constraint  + penalty_v + penalty_x + log(step_iterator) * sum(x)
+
+    # println("obj = $obj")
+    # println("budget = $(log(step_iterator) * budget_constraint)")
+    # println("penalty_v = $penalty_v")
+    # println("penalty_x = $penalty_x")
+    # println("log(step) = $(log(step_iterator))")
+
+    return fitness
+end
+
+
 
 
 

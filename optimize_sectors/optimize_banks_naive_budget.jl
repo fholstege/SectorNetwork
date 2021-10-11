@@ -35,11 +35,13 @@ constraint = (0.0,5000.0)
 list_obj_values = []
 list_constraint_values = []
 
-steps = 10
+steps = 10000
 λb = 0.5
 
+iterator = 0
+
 # get result of naive objective with budget
-res_naive = bboptimize(x -> naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, true,  list_obj_values,list_constraint_values ,λb, false ); 
+res_naive = bboptimize(x -> naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, true, list_obj_values, list_constraint_values, iterator, λb, false); 
                 x0 = x_0,
                 SearchRange = constraint,
                 NumDimensions = 80,

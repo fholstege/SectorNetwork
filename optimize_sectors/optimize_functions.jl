@@ -14,7 +14,7 @@ function normalize_rows_matrix(A)
 end
 
 # calculate the eigenvector centrality of a directed graph
-function calc_eigenvec_centrality(A, type_centrality, normalize)
+function calc_eigenvec_centrality(A, type_centrality)
 
     if type_centrality == "left"
         A = transpose(A)
@@ -115,8 +115,14 @@ end
 
 ## optimize naive objective function with budget constraint
 
-function naive_objective(x, bank_idx, bank_rank, vs_old, A,  normalize, list_obj_values, λb = 0.2, use_abs_diff = false)
-     # construct A based on xs
+function naive_objective(x, bank_idx, bank_rank, vs_old, A,  normalize, list_obj_values, iterator, λb = 0.2, use_abs_diff = false)
+     
+    global iterator += 1
+
+    # 2 function evaluations per step
+    step_iterator = iterator / 2
+    
+    # construct A based on xs
      A_new = construct_A(deepcopy(A), x; opt = "inputs")
 
      if normalize
@@ -134,7 +140,7 @@ function naive_objective(x, bank_idx, bank_rank, vs_old, A,  normalize, list_obj
     if use_abs_diff
         eigenvec_diff = abs(eigenvec_diff)
     end 
- 
+
      # define objective function
      obj = (1-λb) * (1e4 * max(0, (eigenvec_diff)))
  
@@ -151,7 +157,13 @@ function naive_objective(x, bank_idx, bank_rank, vs_old, A,  normalize, list_obj
  
 
 
-function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, normalize,  list_obj_values, list_constraint_values, λb = 0.2, use_abs_diff = false)
+function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, normalize,  list_obj_values, list_constraint_values, iterator, λb = 0.2, use_abs_diff = false)
+
+    # update global iterator
+    global iterator += 1
+
+    # 2 function evaluations per step
+    step_iterator = iterator / 2
 
     # construct A based on xs
     A_new = construct_A(deepcopy(A), x; opt = "inputs")
@@ -173,7 +185,7 @@ function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, nor
     end 
 
     # define objective function
-    obj = (1-λb) * (1e4 * max(0, eigenvec_diff))
+    obj = (1-λb) * (1e4 * max(-0.000001, eigenvec_diff))
     budget_constraint = λb * max(0, sum(x) - budget)^2
 
     push!(list_obj_values, obj)
@@ -185,7 +197,16 @@ function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, nor
         vs_old[i] = vs_new[i]
     end
 
-    return obj + budget_constraint
+    # optimize one or the other based on steps
+    if step_iterator <= 200.0
+        return obj
+    else
+        # reset iterator after 200 steps
+        if step_iterator == 300.0
+            global iterator = 0
+        end
+        return budget_constraint
+    end    
 end
 
 

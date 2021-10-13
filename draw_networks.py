@@ -11,43 +11,55 @@ import sys
 import numpy as np
 import math
 
-# load in the real values for 2019, calc eigenvector
-m2019_real = pd.read_csv('Data/matrices/2019_real.csv',index_col=0)
-m2019_real_eigenvector = calc_eigenvec_centrality_sectors(m2019_real)
-
-### Visualize the real (2019) network
-
-networkx_m2019_real = turn_df_to_networkx(m2019_real)
+# load in the nominal values for 2019, calc eigenvector
+m2016_nominal = pd.read_csv('Data/matrices/2016_nominal.csv',index_col=0)
+#m2016_nominal_normalized = normalize_matrix_rows(m2016_nominal)
 
 
-labels = nx.get_edge_attributes(networkx_m2019_real,'weight')
-pos=nx.spring_layout(networkx_m2019_real)#, k=8/math.sqrt(networkx_m2019_real.order())) 
-
-isolates = nx.isolates(networkx_m2019_real)
-networkx_m2019_real.remove_nodes_from(list(isolates))
+### Visualize the real (2016) network
+networkx_m2016_nominal = turn_df_to_networkx(m2016_nominal)
 
 
-widths = nx.get_edge_attributes(networkx_m2019_real, 'weight')
-nodelist = networkx_m2019_real.nodes()
-nodesizes = list(m2019_real_eigenvector.values())[:-1]
-nodesizes = [element * 20000 for element in nodesizes]
-edgewidths = [element*10 for element in widths.values() ]
+labels = nx.get_edge_attributes(networkx_m2016_nominal,'weight')
+pos=nx.spring_layout(networkx_m2016_nominal, k=15, iterations = 20) 
 
-nx.draw_networkx_nodes(networkx_m2019_real,
+pos_attrs = {}
+for node, coords in pos.items():
+    x = coords[0]
+    y = coords[1]
+    
+    if y <0:
+        y_adjustment = -0.05
+    else:
+        y_adjustment= 0.05
+        
+    if x <0:
+        x_adjustment = -0.05
+    else:
+        x_adjustment= 0.05
+    
+    pos_attrs[node] = (x + x_adjustment, y + y_adjustment)
+
+
+widths = nx.get_edge_attributes(networkx_m2016_nominal, 'weight')
+nodelist = networkx_m2016_nominal.nodes()
+edgewidths = [element/500 for element in widths.values() ]
+
+nx.draw_networkx_nodes(networkx_m2016_nominal,
                        pos,
                        nodelist=nodelist,
-                       node_size=nodesizes,
+                       node_size=300,
                        node_color='lightblue',
-                       edgecolors='black',
-                       alpha=0.7)
-nx.draw_networkx_edges(networkx_m2019_real,
+                       edgecolors='none',
+                       alpha=0.8)
+nx.draw_networkx_edges(networkx_m2016_nominal,
                        pos,
                        edgelist = widths.keys(),
                        width=edgewidths,
-                       edge_color='red',
+                       edge_color='orange',
                        alpha=0.7)
-nx.draw_networkx_labels(networkx_m2019_real, pos=pos,
+nx.draw_networkx_labels(networkx_m2016_nominal, pos=pos_attrs,
                         labels=dict(zip(nodelist,nodelist)),
                         font_color='black',
-                        font_family="sans-serif",
-                        font_size=12)
+                        font_family="monospace",
+                        font_size=10)

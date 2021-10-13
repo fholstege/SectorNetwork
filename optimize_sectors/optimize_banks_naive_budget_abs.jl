@@ -6,7 +6,7 @@ using Plots
 include("optimize_functions.jl")
 
 ## load data
-data_path = joinpath(dirname(@__DIR__), "Data", "Matrices", "2016_nominal.csv")
+data_path = joinpath(dirname(@__DIR__), "Data", "Matrices", "2016_nominal_clean.csv")
 df = CSV.read(data_path, DataFrame)
 @select!(df, $(Not("Column1")))
 
@@ -19,8 +19,16 @@ const bank_idx = findall(col_names .== "Banking")[1]
 # init parameters and objects
 previous_total_x = sum(df[bank_idx, :]);
 
+
+
+
+
+
 # now with normalize = True; A = unnormalized, vs_old = from normalized matrix
-A, vs_old, bank_rank, budget = initialize_objects(df, previous_total_x, bank_idx);
+A, vs_old, bank_rank, budget = initialize_objects(df, previous_total_x, bank_idx,true,"right");
+
+
+
 
 # define the initial vector to start with
 x_0 = A[bank_idx, :]

@@ -5,9 +5,53 @@ import networkx as nx
 import matplotlib.pyplot as plt 
 import math
 
+import readline
+for i in range(readline.get_current_history_length()):
+    print (readline.get_history_item(i + 1))
+
 """
 Part 1: Loading matrices, and turning them from nominal to real
 """
+
+# drop the ones
+# check simulated matrices
+
+def table_eigenvec(eigenvec_result):
+    
+    df_eigenvec = pd.DataFrame(eigenvec_result.items())
+    df_eigenvec.columns = ['sector', 'value']
+    
+    return df_eigenvec
+
+
+def remove_isolated_sectors(df):
+    
+    remove_rows = []
+    
+    
+    for index, row in df.iterrows():
+        n_non_zero_row = np.count_nonzero(row)
+        
+        if n_non_zero_row <= 1:
+            
+            remove_rows.append(index)
+
+    df_rows_removed = df.drop(remove_rows, axis = 1).drop(remove_rows, axis = 0)
+
+    remove_columns = []
+    
+    for col in df_rows_removed:
+        
+        n_non_zero_col = np.count_nonzero(df_rows_removed[col])
+        
+        if n_non_zero_col <= 1:
+            
+            remove_columns.append(col)
+        
+    df_cols_removed = df_rows_removed.drop(remove_columns, axis = 1).drop(remove_columns, axis = 0)
+    
+    return df_cols_removed
+
 
 def load_matrix(matrix_type, year):
     """
@@ -126,17 +170,18 @@ def turn_df_to_networkx(df_sectors):
     networkx_sectors = nx.from_pandas_adjacency(df_sectors,  nx.DiGraph)
     return networkx_sectors
 
-def calc_eigenvec_centrality_sectors(df_sectors, type_centrality, weight='weight'):
+def calc_eigenvec_centrality_sectors(df_sectors, type_centrality,  weight='weight'):
     
     # turn df to networkx
     networkx_sectors = turn_df_to_networkx(df_sectors)
     
-    # by default, python does left vector eigencentrality
-    if type_centrality == 'right':
+    # by default, python does right vector eigencentrality
+    if type_centrality == 'left':
         networkx_sectors = networkx_sectors.reverse()
     
     # use networkx function to calculate the eigenvector centrality
     eigenvector_centrality_sectors = nx.eigenvector_centrality_numpy(networkx_sectors, weight = weight)
+    
     return eigenvector_centrality_sectors
 
 def normalize_matrix_rows(df_sectors):
@@ -154,7 +199,7 @@ def normalize_matrix_rows(df_sectors):
 Part 3:functions for simulating matrices
 """
 
-def simulate_matrices(base_matrix, perc_sd, n_matrices, keep_zero):
+def simulate_matrices(base_matrix, sd, n_matrices, p_0):
     """
     
 
@@ -162,9 +207,8 @@ def simulate_matrices(base_matrix, perc_sd, n_matrices, keep_zero):
     ----------
     base_matrix : dataframe
         dataframe as given - values taken as mean.
-    perc_sd : float
-        percentage of the mean taken as the sd -
-        so forinstance, if mean = 5, sd = perc_sd * 5.
+    sd : float
+        millions for the sd
 
     Returns
     -------
@@ -189,31 +233,31 @@ def simulate_matrices(base_matrix, perc_sd, n_matrices, keep_zero):
     for rowIndex, row in base_matrix.iterrows(): #iterate over rows
         for columnIndex, mean_value in row.items():
             
-            if keep_zero and mean_value == 0: 
-                simulated_values_cell = [0]* n_matrices
-                l_simulated_values.append(simulated_values_cell)
-            else:
-            
+            sd_simulation = sd
+
+
+            simulated_values_cell = []
+                
+            for i in range(0, n_matrices):
+                
+                simulated_value_cell = np.random.normal(mean_value, sd_simulation, None)
+
+                
                 if mean_value == 0:
-                    sd_simulation = perc_sd * 1
-                else:
-                    # determine the sd
-                    sd_simulation = mean_value*perc_sd
-                
-                simulated_values_cell = []
-                
-                for i in range(0, n_matrices):
+                    biased_coin_flip = np.random.binomial(1,p_0,None)
                     
+                    if biased_coin_flip ==0:
+                        simulated_value_cell = 0
+                
+                    
+                # accept reject
+                while simulated_value_cell < 0:
                     simulated_value_cell = np.random.normal(mean_value, sd_simulation, None)
                     
-                    # accept reject
-                    while simulated_value_cell < 0:
-                        simulated_value_cell = np.random.normal(mean_value, sd_simulation, None)
-                    
-                    simulated_values_cell.append(simulated_value_cell)
+                simulated_values_cell.append(simulated_value_cell)
                 
-                # simulate values of this cell            
-                l_simulated_values.append(simulated_values_cell)
+            # simulate values of this cell            
+            l_simulated_values.append(simulated_values_cell)
             
     df_simulations = pd.DataFrame.from_records(l_simulated_values)
     

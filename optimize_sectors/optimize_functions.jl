@@ -67,14 +67,14 @@ function find_next_rank_idx(vs)
 end
 
 # function to initialize all objects for optimization
-function initialize_objects(df, budget, bank_idx, normalize = true)
+function initialize_objects(df, budget, bank_idx, normalize = true, type_centrality = "right")
     A = Matrix(df);
 
     if normalize
         A_norm = normalize_rows_matrix(A)
-        vs_old = calc_eigenvec_centrality(A_norm, "right"); 
+        vs_old = calc_eigenvec_centrality(A_norm, type_centrality); 
     else 
-        vs_old = calc_eigenvec_centrality(A, "right")
+        vs_old = calc_eigenvec_centrality(A, type_centrality);
     end
     
     bank_rank = get_bank_rank(vs_old, bank_idx);

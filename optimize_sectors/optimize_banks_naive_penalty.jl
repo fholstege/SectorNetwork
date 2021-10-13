@@ -6,7 +6,7 @@ using Plots
 include("optimize_functions.jl")
 
 ## load data
-data_path = joinpath(dirname(@__DIR__), "Data", "Matrices", "2016_nominal.csv")
+data_path = joinpath(dirname(@__DIR__), "Data", "Matrices", "2016_nominal_clean_withRental.csv")
 df = CSV.read(data_path, DataFrame)
 @select!(df, $(Not("Column1")))
 
@@ -29,13 +29,13 @@ x_0 = A[bank_idx, :]
 vs_original = deepcopy(vs_old);
 
 # put the constraints in place
-constraint = (0.0,5000.0)
+constraint = (0.0,25000.0)
 
 # save the results
 list_obj_values = []
 list_constraint_values = []
 
-steps = 50000
+steps = 200000
 λb = 0.5
 
 iterator = 0
@@ -44,7 +44,7 @@ iterator = 0
 res_naive = bboptimize(x -> naive_objective_w_penalty(x, bank_idx, bank_rank, vs_old, A, budget, true, list_obj_values, list_constraint_values, iterator, vs_original, x_0, λb, false); 
                 x0 = x_0,
                 SearchRange = constraint,
-                NumDimensions = 80,
+                NumDimensions = 78,
                 MaxSteps = steps,
                 Method = :simultaneous_perturbation_stochastic_approximation);
 
@@ -91,3 +91,27 @@ println("original rank: $bank_rank -- new rank: $bank_rank_new")
 # the sectors ones around banking 
 top_around_banking_original = [vs_original_names[get_sector_ranked_nth(vs_original, i),1:2] for i in bank_rank-K_up:bank_rank+K_low]
 top_around_banking_new = [vs_result_names[get_sector_ranked_nth(vs_result, i),1:2] for i in bank_rank_new-K_up:bank_rank_new+K_low]
+
+
+
+
+        
+results, ranks = repeated_spsa(20, naive_objective_w_penalty, 
+            bank_idx, bank_rank, vs_old, A, budget, true, iterator, vs_original, x_0, λb , false,
+                        (0.0, 25000.0), 
+                        78, 200000)
+
+# get confidence bands on Xs
+
+using Latexify
+
+output_df = DataFrame(mean = vec(mean(results, dims = 2)),
+                        std = vec(std(results, dims = 2)))
+                        
+latextabular(Array(output_df), latex = false, booktabs = true, fmt = "%.2f")
+
+# summarize ranks
+
+mean(ranks)
+
+std(ranks)

@@ -42,13 +42,13 @@ end
 # construct the A matrix
 function construct_A(A, x; opt = "all")
     if opt == "all"
-        if length(x) != (80+79)
+        if length(x) != (78+77)
             println("x dimension incorrect")
         end
-        A[bank_idx,:] = x[1:80]
-        A[1:end .!= bank_idx, bank_idx] = x[81:end]
+        A[bank_idx,:] = x[1:78]
+        A[1:end .!= bank_idx, bank_idx] = x[79:end]
     elseif opt == "inputs"
-        if length(x) != 80
+        if length(x) != 78
             println("x dimension incorrect")
         end
         A[bank_idx,:] = x
@@ -157,7 +157,10 @@ function naive_objective(x, bank_idx, bank_rank, vs_old, A,  normalize, list_obj
  
 
 
-function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, normalize,  list_obj_values, list_constraint_values, iterator, λb = 0.2, use_abs_diff = false)
+function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, normalize,  list_obj_values, list_constraint_values, iterator, vs_initial, x_initial, λb = 0.2, use_abs_diff = false)
+
+    # enforce non-negative values
+    x[x .< 0] .= 0
 
     # update global iterator
     global iterator += 1
@@ -189,7 +192,7 @@ function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, nor
     # budget_constraint = λb * max(0, sum(x) - budget)^2
 
 
-    obj = (1e5 * max(-0.000000001, eigenvec_diff))
+    obj = (1e6 * max(-0.001, eigenvec_diff))
     budget_constraint = max(0, sum(x) - budget)^2
 
     push!(list_obj_values, obj)
@@ -213,13 +216,16 @@ function naive_objective_w_budget(x, bank_idx, bank_rank, vs_old, A, budget, nor
     #     fitness = budget_constraint
     # end    
 
-    fitness = obj + log(sqrt(step_iterator)) * budget_constraint + sum(x)
+    fitness = obj +  log(step_iterator) * budget_constraint
 
     return fitness
 end
 
 
 function naive_objective_w_penalty(x, bank_idx, bank_rank, vs_old, A, budget, normalize, list_obj_values, list_constraint_values, iterator, vs_initial, x_initial, λb = 0.2, use_abs_diff = false)
+
+    # enforce non-negative values
+    x[x .< 0] .= 0
 
     # update global iterator
     global iterator += 1
@@ -251,14 +257,20 @@ function naive_objective_w_penalty(x, bank_idx, bank_rank, vs_old, A, budget, no
     # budget_constraint = λb * max(0, sum(x) - budget)^2
 
 
-    obj = (1e5 * max(-0.0000000001, eigenvec_diff))
+    obj = (1e8 * max(-0.000001, eigenvec_diff))
     budget_constraint = max(0, sum(x) - budget)^2
     
     # try to ensure other eigenvec centralities do not vary much
-    penalty_v = sum((1e4 .* abs.(vs_new[1:end .!= bank_idx] .- vs_initial[1:end .!= bank_idx])))
+    # penalty_v = 1 / length(vs_new[1:end .!= bank_idx]) * sum((1e3 .* (vs_new[1:end .!= bank_idx] .- vs_initial[1:end .!= bank_idx])) .^2)
+    # penalty_v = 1e4 * norm(((vs_new[1:end .!= bank_idx] .- vs_initial[1:end .!= bank_idx])), 1)
+
+
+
+    penalty_v = 1e5 * sum((vs_new[1:end .!= bank_idx] .- vs_initial[1:end .!= bank_idx]) .^2)
 
     # ensure xs do not change too much from original A
-    penalty_x = 1/length(x) * sum((x .- x_initial).^2)
+    # penalty_x = max(0, sum(x .- x_initial))^2
+    penalty_x = norm(x .- x_initial)^2
     # helps to have sth that changes with each step to indicate
     # SPSA in which direction to go
 
@@ -272,8 +284,8 @@ function naive_objective_w_penalty(x, bank_idx, bank_rank, vs_old, A, budget, no
         vs_old[i] = vs_new[i]
     end
 
-    # optimize one or the other based on steps
-    # if step_iterator <= 100.0
+    # # optimize one or the other based on steps
+    # if step_iterator <= 10000.0
     #     fitness = obj
     # else
     #     # reset iterator after 200 steps
@@ -284,13 +296,21 @@ function naive_objective_w_penalty(x, bank_idx, bank_rank, vs_old, A, budget, no
     #     fitness = budget_constraint
     # end    
 
-    fitness = obj + log(step_iterator) * budget_constraint  + penalty_v + penalty_x + log(step_iterator) * sum(x)
+    # if step_iterator > 20000.0
+    #     penalty_x = penalty_x * norm(x)
+    # end
+
+
+    fitness = obj +  log(step_iterator) * budget_constraint + penalty_x
+
 
     # println("obj = $obj")
-    # println("budget = $(log(step_iterator) * budget_constraint)")
-    # println("penalty_v = $penalty_v")
+    # println("budget = $(budget_constraint)")
+    # # println("penalty_v = $penalty_v")
     # println("penalty_x = $penalty_x")
     # println("log(step) = $(log(step_iterator))")
+    # println("step iterator: $step_iterator")
+    # println(log(step_iterator) * (budget_constraint  + penalty_v + penalty_x + sum(x)))
 
     return fitness
 end
@@ -300,26 +320,47 @@ end
 
 
 # repeat the SPSA n_runs times 
-function repeated_spsa(n_runs, objective_func, bank_idx, bank_rank, vs_old, A, budget, λb,
-    SearchRange = (0.0, 5000.0), 
-    NumDimensions=80 , 
-    MaxSteps = 30000 )
+function repeated_spsa(n_runs, objective_func, bank_idx, bank_rank, vs_old, A, budget, normalize, iterator, vs_initial, x_initial, λb = 0.2, use_abs_diff = false,
+    SearchRange = (0.0, 25000.0), 
+    NumDimensions=78, 
+    MaxSteps = 200000)
 
-    results = Array{Any}(undef,NumDimensions , n_runs)
+    results = Array{Any}(undef, NumDimensions, n_runs)
     fill!(results,NaN)
 
-    Threads.@threads for i = 1:n_runs
-        result = bboptimize( x -> objective_func(x, bank_idx, bank_rank, vs_old, A, budget, λb);
+    ranks = []
+
+    for i = 1:n_runs
+
+        println("run $i")
+
+        list_obj_values = []
+        list_constraint_values = []
+
+        global iterator = 0
+
+        result = bboptimize( x -> objective_func(x, bank_idx, bank_rank, vs_old, A, budget, normalize, list_obj_values, list_constraint_values, iterator, vs_initial, x_initial, λb, use_abs_diff);
+                x0 = x_initial,
                 SearchRange = SearchRange,
                 NumDimensions = NumDimensions,
                 MaxSteps = MaxSteps,
-                Method = :simultaneous_perturbation_stochastic_approximation,NThreads=Threads.nthreads()-2);
+                Method = :simultaneous_perturbation_stochastic_approximation,
+                NThreads = Threads.nthreads() - 1);
 
         result_param = best_candidate(result)
-        results[:,i] = result_param
+        results[:,i] = result_param .- x_initial
+
+        # get new A, new eigenvec centralities 
+        A_result = construct_A(copy(A), result_param, opt = "inputs");
+        vs_result = calc_eigenvec_centrality(normalize_rows_matrix(A_result), "right");
+
+        # What is the new rank of banking? 
+        bank_rank_new = get_bank_rank(vs_result, bank_idx);
+
+        push!(ranks, bank_rank_new);
     end
 
-    return results
+    return results, ranks
 end
 
 

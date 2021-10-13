@@ -50,14 +50,23 @@ res_naive = bboptimize(x -> naive_objective_w_penalty(x, bank_idx, bank_rank, vs
 
 
 # plot the objective and constraint
-x = 1:length(list_obj_values)
-objective_score = list_obj_values
-constraint_score = list_constraint_values
+
+
+
+
+x = 1:length(list_obj_values[1:2:end])
+objective_score = list_obj_values[1:2:end]
+
+x = x[3000:end]
+objective_score = objective_score[3000:end]
 
 plot(x, objective_score)
-plot(x, constraint_score)
+plot!(xlabel = "Steps")
+plot!(ylabel = "Objective Function Value")
+plot!(legend = false)
 
 
+png("objective_func_complete")
 #### Check the following:
 
 
@@ -71,6 +80,10 @@ plot(x, constraint_score)
 # get new A, new eigenvec centralities 
 A_result = construct_A(copy(A), best_candidate(res_naive), opt = "inputs");
 vs_result = calc_eigenvec_centrality(normalize_rows_matrix(A_result), "right");
+
+
+
+
 
 # get original eigenvec centralities and names
 vs_original_names = hcat(col_names, vs_original)
@@ -96,7 +109,7 @@ top_around_banking_new = [vs_result_names[get_sector_ranked_nth(vs_result, i),1:
 
 
         
-results, ranks = repeated_spsa(20, naive_objective_w_penalty, 
+results, ranks = repeated_spsa(10, naive_objective_w_penalty, 
             bank_idx, bank_rank, vs_old, A, budget, true, iterator, vs_original, x_0, λb , false,
                         (0.0, 25000.0), 
                         78, 200000)
@@ -105,8 +118,13 @@ results, ranks = repeated_spsa(20, naive_objective_w_penalty,
 
 using Latexify
 
-output_df = DataFrame(mean = vec(mean(results, dims = 2)),
-                        std = vec(std(results, dims = 2)))
+m = vec(mean(results, dims = 2))
+s = vec(std(results, dims = 2))
+
+
+output_df = DataFrame(sector1 = names(df)[1:39], m1 = m[1:39], s1 = s[1:39], 
+sector2 = names(df)[40:end], m2 = m[40:end], s2 = s[40:end])
+  
                         
 latextabular(Array(output_df), latex = false, booktabs = true, fmt = "%.2f")
 
@@ -115,3 +133,17 @@ latextabular(Array(output_df), latex = false, booktabs = true, fmt = "%.2f")
 mean(ranks)
 
 std(ranks)
+
+
+# output of single run
+# using Latexify
+
+# h = A_result[bank_idx, :] .- x_0
+
+
+# output_df = DataFrame(sector1 = names(df)[1:39], x1 = h[1:39],
+#                       sector2 = names(df)[40:end], x2 = h[40:end])
+
+# latextabular(Array(output_df), latex = false, booktabs = true, fmt = "%.2f")
+
+

@@ -225,7 +225,7 @@ end
 function naive_objective_w_penalty(x, bank_idx, bank_rank, vs_old, A, budget, normalize, list_obj_values, list_constraint_values, iterator, vs_initial, x_initial, λb = 0.2, use_abs_diff = false)
 
     # enforce non-negative values
-    # x[x .< 0] .= 0
+    x[x .< 0] .= 0
 
     # update global iterator
     global iterator += 1

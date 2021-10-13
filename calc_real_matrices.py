@@ -6,7 +6,7 @@ Created on Thu Sep 23 16:27:37 2021
 """
 
 
-from helpfunctions import load_matrix, calc_real_matrices
+from helpfunctions import load_matrix, calc_real_matrices, remove_isolated_sectors
 
 
 m2015_nom = load_matrix('Nominal', 2015)
@@ -37,6 +37,22 @@ m2016_nom.to_csv('Data/Matrices/2016_nominal.csv')
 m2017_nom.to_csv('Data/Matrices/2017_nominal.csv')
 m2018_nom.to_csv('Data/Matrices/2018_nominal.csv')
 m2019_nom.to_csv('Data/Matrices/2019_nominal.csv')
+
+remove_sec = ['Lotteries', 'Households with personnel']
+m2015_nom_clean = m2015_nom.drop(remove_sec, axis = 1).drop(remove_sec, axis = 0)
+m2016_nom_clean = m2016_nom.drop(remove_sec, axis = 1).drop(remove_sec, axis = 0)
+m2016_nom_clean = m2017_nom.drop(remove_sec, axis = 1).drop(remove_sec, axis = 0)
+m2016_nom_clean = m2018_nom.drop(remove_sec, axis = 1).drop(remove_sec, axis = 0)
+m2016_nom_clean = m2019_nom.drop(remove_sec, axis = 1).drop(remove_sec, axis = 0)
+
+m2015_nom_clean.to_csv('Data/Matrices/2015_nominal_clean_withRental.csv')
+m2016_nom_clean.to_csv('Data/Matrices/2016_nominal_clean_withRental.csv')
+m2016_nom_clean.to_csv('Data/Matrices/2017_nominal_clean_withRental.csv')
+m2016_nom_clean.to_csv('Data/Matrices/2018_nominal_clean_withRental.csv')
+m2016_nom_clean.to_csv('Data/Matrices/2019_nominal_clean_withRental.csv')
+
+
+
 
 m2015_real.to_csv('Data/Matrices/2015_real.csv')
 m2016_real.to_csv('Data/Matrices/2016_real.csv')

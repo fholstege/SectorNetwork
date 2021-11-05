@@ -109,7 +109,7 @@ top_around_banking_new = [vs_result_names[get_sector_ranked_nth(vs_result, i),1:
 
 
         
-results, ranks = repeated_spsa(10, naive_objective_w_penalty, 
+results, ranks = repeated_spsa(100, naive_objective_w_penalty, 
             bank_idx, bank_rank, vs_old, A, budget, true, iterator, vs_original, x_0, λb , false,
                         (0.0, 25000.0), 
                         78, 200000)
